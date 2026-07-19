@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Keyforge — Password Generator</title>
+<meta name="description" content="A fast, private, offline-capable password and passphrase generator. Everything happens in your browser; nothing is ever sent anywhere.">
+<meta name="theme-color" content="#0b0f1a">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%236366f1'/%3E%3Cpath d='M22 28v-5a10 10 0 0 1 20 0v5' fill='none' stroke='%23fff' stroke-width='5' stroke-linecap='round'/%3E%3Crect x='17' y='28' width='30' height='22' rx='5' fill='%23fff'/%3E%3Ccircle cx='32' cy='37' r='3.4' fill='%236366f1'/%3E%3Crect x='30.4' y='38' width='3.2' height='7' rx='1.6' fill='%236366f1'/%3E%3C/svg%3E">
+<style>
+  :root{
+    --bg:#080b13; --bg2:#0d1220; --card:#111827cc; --line:#1f2a44;
+    --txt:#e8ecf6; --dim:#8d9ab8; --accent:#6366f1; --accent2:#22d3ee;
+    --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --mid:#eab308;
+    --radius:16px;
+  }
+  html[data-theme="light"]{
+    --bg:#f4f6fb; --bg2:#ffffff; --card:#ffffffee; --line:#dfe5f2;
+    --txt:#111827; --dim:#5b6885; --accent:#4f46e5; --accent2:#0891b2;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
+    background:var(--bg); color:var(--txt);
+    min-height:100dvh; padding:24px 16px 56px;
+    background-image:
+      radial-gradient(900px 500px at 12% -8%, rgba(99,102,241,.20), transparent 60%),
+      radial-gradient(800px 480px at 92% 4%, rgba(34,211,238,.14), transparent 60%);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:760px;margin:0 auto}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+  .logo{width:40px;height:40px;border-radius:12px;background:linear-gradient(140deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;flex:none;box-shadow:0 6px 20px -6px var(--accent)}
+  .logo svg{width:22px;height:22px}
+  h1{font-size:19px;font-weight:700;letter-spacing:-.02em}
+  header p{font-size:12.5px;color:var(--dim)}
+  .spacer{flex:1}
+  .icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);
+    color:var(--dim);display:grid;place-items:center;cursor:pointer;transition:.15s}
+  .icon-btn:hover{color:var(--txt);border-color:var(--accent)}
+  .icon-btn svg{width:17px;height:17px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px;margin-bottom:14px;backdrop-filter:blur(12px)}
+
+  /* ---- tabs ---- */
+  .tabs{display:flex;gap:4px;background:var(--bg2);border:1px solid var(--line);
+    border-radius:12px;padding:4px;margin-bottom:14px}
+  .tab{flex:1;padding:9px;border:0;border-radius:9px;background:transparent;color:var(--dim);
+    font:inherit;font-weight:600;font-size:13.5px;cursor:pointer;transition:.15s}
+  .tab[aria-selected="true"]{background:var(--accent);color:#fff;box-shadow:0 4px 14px -6px var(--accent)}
+
+  /* ---- output ---- */
+  .out{position:relative;border:1px solid var(--line);border-radius:12px;background:var(--bg2);
+    padding:20px 16px;min-height:96px;display:grid;place-items:center;overflow:hidden}
+  #pw{font:600 clamp(17px,4.4vw,25px)/1.45 ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,monospace;
+    word-break:break-all;text-align:center;letter-spacing:.5px;user-select:all}
+  #pw .d{color:var(--accent2)} #pw .s{color:var(--warn)} #pw .u{color:var(--txt)} #pw .l{color:var(--dim)}
+  html[data-theme="light"] #pw .l{color:#475569}
+  .row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  button.act{flex:1;min-width:120px;padding:12px 14px;border-radius:11px;border:1px solid var(--line);
+    background:var(--bg2);color:var(--txt);font:inherit;font-weight:600;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:8px;transition:.15s}
+  button.act:hover{border-color:var(--accent);transform:translateY(-1px)}
+  button.act:active{transform:translateY(0)}
+  button.act svg{width:16px;height:16px;flex:none}
+  button.primary{background:linear-gradient(135deg,var(--accent),#7c3aed);border-color:transparent;color:#fff;
+    box-shadow:0 8px 22px -10px var(--accent)}
+  button.copied{background:var(--ok)!important;border-color:transparent!important;color:#04170b!important}
+
+  /* ---- strength ---- */
+  .meter{display:flex;gap:5px;margin:16px 0 9px}
+  .meter i{height:6px;flex:1;border-radius:99px;background:var(--line);transition:.3s}
+  .sline{display:flex;justify-content:space-between;align-items:baseline;gap:12px;font-size:12.5px;flex-wrap:wrap}
+  #slabel{font-weight:700;font-size:13.5px}
+  .sline span{color:var(--dim)}
+  #scrack{font-variant-numeric:tabular-nums}
+
+  /* ---- controls ---- */
+  h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:14px;font-weight:700}
+  .lenhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+  .lenhead b{font:700 22px/1 ui-monospace,monospace;color:var(--accent2)}
+  .lenhead label{font-size:13.5px;font-weight:600}
+  input[type=range]{width:100%;height:26px;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:99px;
+    background:linear-gradient(90deg,var(--accent) var(--pct,50%),var(--line) var(--pct,50%))}
+  input[type=range]::-moz-range-track{height:6px;border-radius:99px;background:var(--line)}
+  input[type=range]::-moz-range-progress{height:6px;border-radius:99px;background:var(--accent)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;
+    background:#fff;border:4px solid var(--accent);margin-top:-7px;box-shadow:0 2px 8px rgba(0,0,0,.4)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;border:4px solid var(--accent)}
+  .ticks{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:-2px}
+
+  .opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:18px}
+  .opt{display:flex;align-items:center;gap:10px;padding:11px 12px;border:1px solid var(--line);
+    border-radius:11px;background:var(--bg2);cursor:pointer;transition:.15s;user-select:none}
+  .opt:hover{border-color:var(--accent)}
+  .opt.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,var(--bg2))}
+  .opt input{position:absolute;opacity:0;pointer-events:none}
+  .box{width:19px;height:19px;border-radius:6px;border:2px solid var(--line);flex:none;
+    display:grid;place-items:center;transition:.15s}
+  .opt.on .box{background:var(--accent);border-color:var(--accent)}
+  .box svg{width:11px;height:11px;opacity:0;transition:.15s;color:#fff}
+  .opt.on .box svg{opacity:1}
+  .opt .txt{display:flex;flex-direction:column;min-width:0}
+  .opt .txt b{font-size:13.5px;font-weight:600}
+  .opt .txt small{font-size:11px;color:var(--dim);font-family:ui-monospace,monospace;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  .num{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:var(--bg2);margin-top:8px}
+  .num label{font-size:13.5px;font-weight:600}
+  .num small{display:block;font-size:11px;color:var(--dim);font-weight:400}
+  .num select,.num input[type=text]{background:var(--bg);color:var(--txt);border:1px solid var(--line);
+    border-radius:8px;padding:7px 9px;font:inherit;font-size:13px;min-width:74px;font-family:ui-monospace,monospace}
+  .num select:focus,.num input:focus{outline:2px solid var(--accent);outline-offset:1px}
+
+  .warn{display:none;margin-top:12px;padding:10px 12px;border-radius:10px;font-size:12.5px;
+    background:color-mix(in srgb,var(--warn) 16%,transparent);border:1px solid var(--warn);color:var(--warn)}
+  .warn.show{display:block}
+
+  /* ---- history ---- */
+  #hist{list-style:none;display:flex;flex-direction:column;gap:6px}
+  #hist li{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line);
+    border-radius:10px;background:var(--bg2);font:13px/1.4 ui-monospace,monospace;animation:pop .25s ease}
+  @keyframes pop{from{opacity:0;transform:translateY(-4px)}}
+  #hist code{flex:1;word-break:break-all;color:var(--dim)}
+  #hist button{border:0;background:transparent;color:var(--dim);cursor:pointer;padding:4px;border-radius:6px;
+    display:grid;place-items:center}
+  #hist button:hover{color:var(--accent2);background:var(--bg)}
+  #hist button svg{width:15px;height:15px}
+  .hhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+  .hhead h2{margin:0}
+  .link{background:none;border:0;color:var(--dim);font:inherit;font-size:12px;cursor:pointer;text-decoration:underline}
+  .link:hover{color:var(--bad)}
+  .empty{font-size:13px;color:var(--dim);text-align:center;padding:10px}
+
+  footer{text-align:center;font-size:12px;color:var(--dim);margin-top:22px;line-height:1.8}
+  footer b{color:var(--ok)}
+  #install{display:none;margin:0 auto 14px;padding:10px 18px;border-radius:11px;border:1px dashed var(--accent);
+    background:transparent;color:var(--accent);font:inherit;font-weight:600;cursor:pointer}
+  #install.show{display:block}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translate(-50%,90px);background:var(--ok);color:#04170b;
+    padding:11px 20px;border-radius:99px;font-weight:700;font-size:13.5px;transition:.28s cubic-bezier(.2,.9,.3,1.4);
+    pointer-events:none;z-index:50;box-shadow:0 10px 30px -8px rgba(0,0,0,.6)}
+  .toast.show{transform:translate(-50%,0)}
+  .hide{display:none!important}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
+        <path d="M22 28v-5a10 10 0 0 1 20 0v5" stroke="#fff" stroke-width="5.5" stroke-linecap="round"/>
+        <rect x="16" y="28" width="32" height="23" rx="6" fill="#fff"/>
+        <circle cx="32" cy="37.5" r="3.4" fill="#4f46e5"/>
+        <rect x="30.4" y="38.5" width="3.2" height="7" rx="1.6" fill="#4f46e5"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Keyforge</h1>
+      <p>Strong passwords, generated on your device</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="icon-btn" id="theme" title="Toggle theme" aria-label="Toggle light or dark theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path id="ticon" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>
+      </svg>
+    </button>
+  </header>
+
+  <button id="install">⇩ Install app</button>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tab-pw" role="tab" aria-selected="true" aria-controls="panel-pw">Password</button>
+    <button class="tab" id="tab-pp" role="tab" aria-selected="false" aria-controls="panel-pp">Passphrase</button>
+  </div>
+
+  <!-- OUTPUT -->
+  <div class="card">
+    <div class="out"><div id="pw" aria-live="polite" aria-atomic="true">&nbsp;</div></div>
+
+    <div class="row">
+      <button class="act primary" id="gen">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 2v6h-6M3 22v-6h6"/><path d="M21 8A9 9 0 0 0 5.6 5.6L3 8m0 8a9 9 0 0 0 15.4 2.4L21 16"/>
+        </svg>Generate
+      </button>
+      <button class="act" id="copy">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+        </svg><span id="copytxt">Copy</span>
+      </button>
+    </div>
+
+    <div class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="sline">
+      <span id="slabel">—</span>
+      <span id="sbits">—</span>
+      <span id="scrack">—</span>
+    </div>
+  </div>
+
+  <!-- PASSWORD RULES -->
+  <section class="card" id="panel-pw" role="tabpanel" aria-labelledby="tab-pw">
+    <h2>Rules</h2>
+    <div class="lenhead"><label for="len">Length</label><b id="lenval">20</b></div>
+    <input type="range" id="len" min="4" max="72" value="20" step="1" aria-describedby="lenval">
+    <div class="ticks"><span>4</span><span>20</span><span>40</span><span>72</span></div>
+
+    <div class="opts">
+      <label class="opt on"><input type="checkbox" id="lower" checked>
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>Lowercase</b><small>a b c d e</small></span></label>
+
+      <label class="opt on"><input type="checkbox" id="upper" checked>
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>Uppercase</b><small>A B C D E</small></span></label>
+
+      <label class="opt on"><input type="checkbox" id="digit" checked>
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>Numbers</b><small>0 1 2 3 4</small></span></label>
+
+      <label class="opt on"><input type="checkbox" id="symbol" checked>
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>Symbols</b><small>! @ # $ %</small></span></label>
+
+      <label class="opt"><input type="checkbox" id="noAmb">
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>No look-alikes</b><small>skip 0 O l 1 I</small></span></label>
+
+      <label class="opt on"><input type="checkbox" id="everyType" checked>
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>One of each type</b><small>satisfy site rules</small></span></label>
+
+      <label class="opt"><input type="checkbox" id="noRepeat">
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>No repeats</b><small>every char unique</small></span></label>
+    </div>
+
+    <div class="num">
+      <label for="exclude">Exclude characters<small>never use these</small></label>
+      <input type="text" id="exclude" placeholder="e.g. &lt;&gt;&amp;" autocomplete="off" spellcheck="false" style="min-width:110px">
+    </div>
+
+    <div class="warn" id="pwwarn"></div>
+  </section>
+
+  <!-- PASSPHRASE RULES -->
+  <section class="card hide" id="panel-pp" role="tabpanel" aria-labelledby="tab-pp">
+    <h2>Rules</h2>
+    <div class="lenhead"><label for="words">Words</label><b id="wordval">7</b></div>
+    <input type="range" id="words" min="3" max="12" value="7" step="1">
+    <div class="ticks"><span>3</span><span>6</span><span>9</span><span>12</span></div>
+
+    <div class="num">
+      <label for="sep">Separator<small>between words</small></label>
+      <select id="sep">
+        <option value="-">hyphen  -</option>
+        <option value=".">period  .</option>
+        <option value="_">underscore  _</option>
+        <option value=" ">space</option>
+        <option value="">none</option>
+        <option value="digit">random digit</option>
+      </select>
+    </div>
+
+    <div class="opts">
+      <label class="opt on"><input type="checkbox" id="ppCap" checked>
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>Capitalize</b><small>Each Word</small></span></label>
+
+      <label class="opt"><input type="checkbox" id="ppNum">
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>Add a number</b><small>word47</small></span></label>
+
+      <label class="opt"><input type="checkbox" id="ppSym">
+        <span class="box"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="txt"><b>Add a symbol</b><small>word!</small></span></label>
+    </div>
+    <div class="warn" id="ppinfo" style="display:block;background:transparent;border-color:var(--line);color:var(--dim)"></div>
+  </section>
+
+  <!-- HISTORY -->
+  <section class="card">
+    <div class="hhead">
+      <h2>This session</h2>
+      <button class="link" id="clear">Clear</button>
+    </div>
+    <ul id="hist"></ul>
+    <p class="empty" id="histempty">Nothing generated yet.</p>
+  </section>
+
+  <footer>
+    <b>100% offline.</b> Nothing you generate leaves this device — no network calls, no analytics, no storage of passwords.<br>
+    Randomness comes from your browser's cryptographic generator (<code>crypto.getRandomValues</code>), sampled without bias.
+  </footer>
+</div>
+
+<div class="toast" id="toast">Copied</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ============================================================
+   1. UNBIASED RANDOMNESS  (rejection sampling — no modulo bias)
+   ============================================================ */
+const rand = (max) => {                     // uniform int in [0, max)
+  if (max <= 0) throw new Error('range');
+  if (max === 1) return 0;
+  const limit = Math.floor(0x100000000 / max) * max;   // largest multiple of max
+  const buf = new Uint32Array(1);
+  let v;
+  do { crypto.getRandomValues(buf); v = buf[0]; } while (v >= limit);
+  return v % max;
+};
+const pick = (arr) => arr[rand(arr.length)];
+const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+/* ============================================================
+   2. CHARACTER SETS
+   ============================================================ */
+const SETS = {
+  lower:  'abcdefghijklmnopqrstuvwxyz',
+  upper:  'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  digit:  '0123456789',
+  symbol: '!@#$%^&*()-_=+[]{};:,.?/~'
+};
+const AMBIGUOUS = new Set('0O1lI|`\'";:.,'.split(''));
+
+/* ============================================================
+   3. WORD LIST for passphrases (short, common, easy to type)
+   ============================================================ */
+const WORDS = ('able acid acorn actor adapt admit adobe adopt agile agree album alert alien alley alloy alpha amber amend '+
+'amuse angel angle ankle apple apron arbor arena argue armor arrow ashes aside asset atlas attic audio audit aunt aurora '+
+'autumn avoid awake award aware bacon badge bagel baker balance balcony ballad bamboo banana banjo banner barley barn basil '+
+'basin basket batch beacon beam bean beast beaver bench berry beta bicycle binder birch bishop bison blade blanket blaze '+
+'blend blink bloom blossom blue blush board bobcat bold bonus boost border bottle boulder bounce bowl brace braid brain '+
+'branch brass brave bread breeze brick bridge brief bright bring brisk broad bronze brook broom brown brush bubble bucket '+
+'buffalo bugle build bulb bunch bundle bunny burst butter cabin cable cactus camel candle canoe canvas canyon capsule '+
+'captain carbon cargo carpet carrot carve cascade castle catch cattle cause cedar celery cement census chalk chamber charm '+
+'chase cheese cherry chess chest chief chill chime choice chorus cider cinema circle citrus civic claim clamp clarity clay '+
+'clean clever cliff climb cloak clock cloud clover cluster coach coast cobalt cocoa coffee coil collar colony color column '+
+'comet comfort compass concert condor coral corner cottage cotton county courage cousin coyote crab craft crane crater '+
+'crayon cream credit creek crest cricket crimson crisp crop cross crowd crown cruise crumb crystal cube cabin cumin curl '+
+'curve cushion cycle cypress daisy dance dawn dazzle deal debate decade decor deer delay delta demand denim dense depth '+
+'desert design desk detail device dial diamond diary dice diesel digital dime diner dinner direct ditch divide dock doctor '+
+'dodge dolphin domain donate donkey donut double dove downtown dozen draft dragon drama draw dream dress drift drill drink '+
+'drive drum dryer duck dune dusk dust eagle early earth easel east eaten echo edge eight elbow elder electric elegant '+
+'elephant elite ember emerald empire employ enable enamel energy engine enjoy enough ensure entry envoy equal equip escape '+
+'essay estate ethic evening event exact exam excel exhale exit expand expert extra fabric facade factor fade falcon family '+
+'fancy farm fashion fault feast feather fern ferry fetch fever fiber fiction field fifth figure filter final finch finger '+
+'finish fire first fiscal fitness flag flame flash fleet flight float flock flood floor flour flower fluid flute focus '+
+'foggy foil folder follow forest forge fortune forum fossil foster found fox frame free fresh friend fringe frog front '+
+'frost fruit fuel funny fusion future gadget galaxy gallery game garden garlic gate gauge gaze gear gecko gem gentle '+
+'genuine giant ginger giraffe glacier glad glass glide globe glory glove glow goal goat gold golf gospel govern grace '+
+'grain grand granite grape graph grass gravel gray great green grid grill grip grove growth guard guess guide guitar gulf '+
+'habit hall hammer hamster handle happy harbor harvest hatch haven hawk hazel heart heavy hedge helium hello helmet herb '+
+'heron hidden hill hinge history hobby hockey hold hollow honey hood hope horizon horse hotel hour house human humble '+
+'hunter hurdle hydro ice icon idea igloo image impact inch index indigo indoor infant ink inlet inner input insect inside '+
+'invest invite iris iron island issue ivory ivy jacket jade jaguar jam jazz jelly jewel jockey jolly journal joy judge '+
+'juice jungle junior jury kayak keen kernel kettle key kick kind king kiosk kitchen kite kitten knee knife knight knot '+
+'koala label labor ladder lagoon lake lamp lantern laptop large laser lasso latch later laugh launch laurel lava lawn '+
+'layer leader leaf league leap learn ledge legacy legend lemon length lens leopard lesson letter level lever liberty '+
+'library light lilac lily lime limit linen link lion liquid list little lively lizard llama load loaf lobby local locket '+
+'lodge logic lotus loud lounge lucky lumber lunar lunch lynx lyric magic magnet maize major mango manor maple marble march '+
+'marina market marsh mask mason match meadow medal media medium melody melon member memory mentor menu mercy merge merit '+
+'mesa metal meteor method metric micro midday might mild milk mimic mineral mint minute mirror mist mobile modern modest '+
+'moment monitor monkey month moon moral morning mosaic motel motion motor mound mount mouse movie muffin mural muscle '+
+'museum music mustard myth nacho napkin narrow native nature navy nectar needle neon nerve nest network neutral never '+
+'newt niche nickel night nimble noble noise noodle normal north notice novel number nurse nutmeg oasis object ocean octave '+
+'octopus office often olive omega onion onward opal open opera orange orbit orchard orchid order oregano organ origin '+
+'osprey otter ounce outdoor outer oval oven owl oxide oyster pace pact paddle page paint palace palm panda panel panther '+
+'paper parade parcel parent park parrot parsley party pasta pastel patch path patient patrol pattern pause peach peak '+
+'peanut pearl pebble pecan pedal pelican pencil penguin people pepper perch perfect period permit person phase phoenix '+
+'phone photo phrase piano picnic pigeon pillow pilot pine pink pioneer pipe pistol pitch pixel pizza place plain planet '+
+'plank plant plasma plate play plaza pledge plum plume pocket poem point polar polish pond pony poplar poppy porch portal '+
+'poster potato pottery powder power prairie praise prawn precise prefer press pretty price pride prime print prism prize '+
+'probe profit prompt proof proper proud prune public pudding puffin pulse puma pumpkin punch puppy purple purse puzzle '+
+'pyramid quail quality quarry quartz queen quest quick quiet quilt quote rabbit racer radar radio radish raft rally ramp '+
+'ranch random range rapid rare raven razor reach react ready realm reason rebel recipe record reed reef refine region '+
+'relax relay relic remedy remind rental repair report rescue resort result retro return reward rhino rhythm ribbon rice '+
+'rider ridge rifle right rigid ring ripple risk ritual river roast robin robot rocket rodeo roller roof rookie room roost '+
+'root rope rose rotate rough round route royal rubber ruby rudder rugby ruler rumor runner rural rustic saddle safari '+
+'safe saga sage sail salad salmon salt sample sand sapphire sardine satin sauce saucer savor scale scarf scene scholar '+
+'school scope score scout scrap screen script scroll sculpt season second secret sector sedan seed segment select seminar '+
+'senate sense sentry sequel serene serial series sermon settle seven shade shadow shaft shallow shampoo shape shard shark '+
+'sharp shell shelter sheriff shield shift shine ship shirt shock shoe shore short shovel shrimp shrub shuttle sibling '+
+'sierra signal silent silk silver simple singer siren sister sketch skill skirt skull sky slate sleek sleep slice slide '+
+'slope small smart smile smoke smooth snack snail snake sneak snow soap soccer social socket soda sofa softly solar solid '+
+'solve sonar song sonic sorbet sound soup source south space spade spark speak spear speed spell sphere spice spider '+
+'spike spine spiral spirit splash spoke sponge spoon sport spot spray spring sprout spruce square squash squid stable '+
+'stack staff stage stairs stamp stand staple star state steady steam steel stellar step stereo stick still stitch stock '+
+'stone stool storm story stove strap straw stream street strike string strong studio study stump style sugar suite summer '+
+'summit sunny sunset super surf surge sushi swallow swamp swan swarm sweater sweep sweet swift swing switch sword symbol '+
+'syrup system table tackle tactic tailor talent tandem tangle tape target tarp tavern teach teal team tech tempo tender '+
+'tennis tent terra thank theater theory thermal thick thing think thistle thorn thread thrive throne thumb thunder ticket '+
+'tidal tiger tile timber timer tissue title toast today toffee toggle token tomato tone tonic tooth topaz topic torch '+
+'total totem toucan touch tough tower town trace track trade trail train tram trap travel tray treat tree trend trial '+
+'tribe trick trim trio triumph trophy tropic trout truck true trumpet trust truth tuba tulip tumble tuna tunnel turbo '+
+'turkey turtle tutor twelve twig twin twist ultra umbrella uncle under unicorn union unique unit unity update uphill '+
+'upper urban urgent usage useful usher utility vacuum valid valley value valve vanilla vapor vault vector velvet vendor '+
+'venture venue verb verdict verse vessel veteran vibrant victor video view villa vintage violet violin viper virtue '+
+'vision visit vital vivid vocal voice volcano volume vote voyage waffle wagon walnut walrus wander warden warm warmth '+
+'wasp watch water wave wealth weasel weather weave wedge weekly weight welcome well west whale wheat wheel whisper white '+
+'whole wide wild willow wind window wing winner winter wire wisdom wise wolf wonder wood wool word work world worth '+
+'woven wrap wren wrist write yacht yard yarn year yeast yellow yield yoga yogurt young zebra zenith zero zigzag zinc '+
+'zone zoom').split(/\s+/).filter(Boolean);
+const WORDSET = [...new Set(WORDS)];   // dedupe so entropy math is honest
+
+/* ============================================================
+   4. DOM
+   ============================================================ */
+const $ = (id) => document.getElementById(id);
+const out = $('pw'), lenEl = $('len'), lenVal = $('lenval'), wordsEl = $('words'), wordVal = $('wordval');
+const meter = document.querySelectorAll('.meter i');
+const toast = $('toast'), histEl = $('hist'), histEmpty = $('histempty');
+const boxes = ['lower','upper','digit','symbol','noAmb','everyType','noRepeat','ppCap','ppNum','ppSym'].map($);
+let mode = 'pw', current = '', history = [];
+
+/* ============================================================
+   5. GENERATORS
+   ============================================================ */
+function buildPools() {
+  const excl = new Set($('exclude').value.split(''));
+  const strip = (s) => s.split('').filter(c => !excl.has(c) && !($('noAmb').checked && AMBIGUOUS.has(c)));
+  const pools = [];
+  if ($('lower').checked)  pools.push(strip(SETS.lower));
+  if ($('upper').checked)  pools.push(strip(SETS.upper));
+  if ($('digit').checked)  pools.push(strip(SETS.digit));
+  if ($('symbol').checked) pools.push(strip(SETS.symbol));
+  return pools.filter(p => p.length > 0);
+}
+
+function makePassword() {
+  const pools = buildPools();
+  const warnEl = $('pwwarn');
+  if (!pools.length) { warnEl.textContent = 'Pick at least one character type (or loosen your exclusions).'; warnEl.classList.add('show'); return null; }
+
+  const all = pools.flat();
+  let len = +lenEl.value;
+  const unique = $('noRepeat').checked;
+  const msgs = [];
+
+  if (unique && len > all.length) { len = all.length; msgs.push('Length capped at ' + len + ' — that is every available character with no repeats.'); }
+  const everyType = $('everyType').checked && pools.length <= len;
+  if ($('everyType').checked && pools.length > len) msgs.push('Too short to include one of every type; that rule was skipped.');
+
+  let chars;
+  if (unique) {
+    const bag = all.slice();
+    if (everyType) {
+      chars = pools.map(p => {                      // one guaranteed per type
+        const c = pick(p);
+        bag.splice(bag.indexOf(c), 1);
+        return c;
+      });
+      while (chars.length < len) chars.push(bag.splice(rand(bag.length), 1)[0]);
+    } else {
+      chars = [];
+      while (chars.length < len) chars.push(bag.splice(rand(bag.length), 1)[0]);
+    }
+  } else {
+    chars = everyType ? pools.map(pick) : [];
+    while (chars.length < len) chars.push(pick(all));
+  }
+
+  warnEl.classList.toggle('show', msgs.length > 0);
+  warnEl.textContent = msgs.join(' ');
+  return shuffle(chars).join('');
+}
+
+function makePassphrase() {
+  const n = +wordsEl.value, sep = $('sep').value, cap = $('ppCap').checked;
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    let w = pick(WORDSET);
+    if (cap) w = w[0].toUpperCase() + w.slice(1);
+    parts.push(w);
+  }
+  let s = sep === 'digit'
+    ? parts.reduce((a, w, i) => i ? a + rand(10) + w : w, '')
+    : parts.join(sep);
+  if ($('ppNum').checked) s += rand(90) + 10;
+  if ($('ppSym').checked) s += pick('!@#$%^&*?-+='.split(''));
+  return s;
+}
+
+/* ============================================================
+   6. ENTROPY  (bits = log2 of the actual number of possible outputs)
+   ============================================================ */
+function entropy(str) {
+  if (mode === 'pp') {
+    const n = +wordsEl.value;
+    let bits = n * Math.log2(WORDSET.length);
+    if ($('sep').value === 'digit') bits += (n - 1) * Math.log2(10);
+    if ($('ppNum').checked) bits += Math.log2(90);
+    if ($('ppSym').checked) bits += Math.log2(12);
+    return bits;
+  }
+  const pools = buildPools();
+  if (!pools.length) return 0;
+  const N = pools.flat().length, L = str.length;
+  // No-repeat draws without replacement: log2(N! / (N-L)!)
+  if ($('noRepeat').checked) {
+    let bits = 0;
+    for (let i = 0; i < L; i++) bits += Math.log2(N - i);
+    return bits;
+  }
+  return L * Math.log2(N);
+}
+
+const BANDS = [
+  { max: 35,  label: 'Very weak', color: 'var(--bad)',  fill: 1 },
+  { max: 55,  label: 'Weak',      color: 'var(--warn)', fill: 2 },
+  { max: 75,  label: 'Good',      color: 'var(--mid)',  fill: 3 },
+  { max: 100, label: 'Strong',    color: 'var(--ok)',   fill: 4 },
+  { max: 1e9, label: 'Excellent', color: 'var(--ok)',   fill: 5 }
+];
+
+function crackTime(bits) {
+  // Offline attack against a fast hash: 100 billion guesses/second. Average = half the keyspace.
+  const secs = Math.pow(2, bits - 1) / 1e11;
+  if (secs < 1) return 'cracked instantly';
+  const U = [[60,'second'],[60,'minute'],[24,'hour'],[365,'day'],[1000,'year'],[1000,'millennium']];
+  let v = secs, name = 'second';
+  for (const [div, next] of U) { if (v < div) break; v /= div; name = next; }
+  const nm = { second:'seconds', minute:'minutes', hour:'hours', day:'days', year:'years', millennium:'millennia' };
+  if (v > 1e6) return '~' + v.toExponential(1).replace('e+', '×10^') + ' ' + nm[name] + ' to crack';
+  return '~' + (v < 10 ? v.toFixed(1) : Math.round(v).toLocaleString()) + ' ' + nm[name] + ' to crack';
+}
+
+function paint(str) {
+  const cls = (c) => /[0-9]/.test(c) ? 'd' : /[a-z]/.test(c) ? 'l' : /[A-Z]/.test(c) ? 'u' : 's';
+  out.innerHTML = str.split('').map(c =>
+    '<span class="' + cls(c) + '">' + c.replace(/[<>&]/g, m => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;' }[m])) + '</span>'
+  ).join('');
+}
+
+function score(str) {
+  const bits = entropy(str);
+  const band = BANDS.find(b => bits < b.max);
+  meter.forEach((el, i) => el.style.background = i < band.fill ? band.color : 'var(--line)');
+  $('slabel').textContent = band.label;
+  $('slabel').style.color = band.color;
+  $('sbits').textContent = Math.round(bits) + ' bits of entropy';
+  $('scrack').textContent = crackTime(bits);
+}
+
+/* ============================================================
+   7. ACTIONS
+   ============================================================ */
+function generate() {
+  const s = mode === 'pw' ? makePassword() : makePassphrase();
+  if (s === null) { out.textContent = '—'; meter.forEach(el => el.style.background = 'var(--line)');
+    $('slabel').textContent = '—'; $('sbits').textContent = '—'; $('scrack').textContent = '—'; current = ''; return; }
+  current = s;
+  paint(s);
+  score(s);
+  addHistory(s);
+}
+
+function addHistory(s) {
+  history.unshift(s);
+  history = history.slice(0, 8);
+  render();
+}
+
+function render() {
+  histEmpty.classList.toggle('hide', history.length > 0);
+  histEl.innerHTML = '';
+  history.forEach((h) => {
+    const li = document.createElement('li');
+    const code = document.createElement('code');
+    code.textContent = h;
+    const b = document.createElement('button');
+    b.title = 'Copy'; b.setAttribute('aria-label', 'Copy this password');
+    b.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+    b.onclick = () => copyText(h);
+    li.append(code, b);
+    histEl.appendChild(li);
+  });
+}
+
+async function copyText(text) {
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); } catch {}
+    ta.remove();
+  }
+  toast.classList.add('show');
+  clearTimeout(copyText._t);
+  copyText._t = setTimeout(() => toast.classList.remove('show'), 1500);
+}
+
+/* ============================================================
+   8. WIRING
+   ============================================================ */
+const PREF_KEY = 'keyforge.prefs.v1';       // settings only — never passwords
+
+function savePrefs() {
+  const p = { mode, len: lenEl.value, words: wordsEl.value, sep: $('sep').value,
+              excl: $('exclude').value, theme: document.documentElement.dataset.theme };
+  boxes.forEach(b => p[b.id] = b.checked);
+  try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch {}
+}
+
+function loadPrefs() {
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem(PREF_KEY) || '{}'); } catch {}
+  if (p.theme) document.documentElement.dataset.theme = p.theme;
+  if (p.len) lenEl.value = p.len;
+  if (p.words) wordsEl.value = p.words;
+  if (p.sep !== undefined) $('sep').value = p.sep;
+  if (p.excl) $('exclude').value = p.excl;
+  boxes.forEach(b => { if (typeof p[b.id] === 'boolean') b.checked = p[b.id]; });
+  if (p.mode === 'pp') setMode('pp', false);
+}
+
+function syncUI() {
+  lenVal.textContent = lenEl.value;
+  wordVal.textContent = wordsEl.value;
+  lenEl.style.setProperty('--pct', ((lenEl.value - 4) / (72 - 4) * 100) + '%');
+  wordsEl.style.setProperty('--pct', ((wordsEl.value - 3) / (12 - 3) * 100) + '%');
+  document.querySelectorAll('.opt').forEach(o => o.classList.toggle('on', o.querySelector('input').checked));
+  const bits = +wordsEl.value * Math.log2(WORDSET.length);
+  $('ppinfo').textContent = WORDSET.length.toLocaleString() + '-word list · ' +
+    Math.log2(WORDSET.length).toFixed(1) + ' bits per word · ' + Math.round(bits) + ' bits from the words alone.';
+}
+
+function setMode(m, regen = true) {
+  mode = m;
+  $('tab-pw').setAttribute('aria-selected', m === 'pw');
+  $('tab-pp').setAttribute('aria-selected', m === 'pp');
+  $('panel-pw').classList.toggle('hide', m !== 'pw');
+  $('panel-pp').classList.toggle('hide', m !== 'pp');
+  if (regen) generate();
+}
+
+$('tab-pw').onclick = () => { setMode('pw'); savePrefs(); };
+$('tab-pp').onclick = () => { setMode('pp'); savePrefs(); };
+$('gen').onclick = generate;
+$('copy').onclick = () => copyText(current);
+$('clear').onclick = () => { history = []; render(); };
+
+[lenEl, wordsEl].forEach(el => el.addEventListener('input', () => { syncUI(); generate(); savePrefs(); }));
+document.querySelectorAll('.opt input, #sep').forEach(el =>
+  el.addEventListener('change', () => { syncUI(); generate(); savePrefs(); }));
+$('exclude').addEventListener('input', () => { generate(); savePrefs(); });
+
+$('theme').onclick = () => {
+  const light = document.documentElement.dataset.theme === 'light';
+  document.documentElement.dataset.theme = light ? 'dark' : 'light';
+  $('ticon').setAttribute('d', light ? 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z'
+                                     : 'M12 4v1m0 14v1m8-8h-1M5 12H4m14.1-5.7-.7.7M6.6 17.4l-.7.7m12.2 0-.7-.7M6.6 6.6l-.7-.7M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0');
+  savePrefs();
+};
+
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input[type=text], select')) return;
+  if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); generate(); }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c' && !window.getSelection().toString()) {
+    e.preventDefault(); copyText(current);
+  }
+});
+
+/* ============================================================
+   9. PWA — runtime manifest + icons, so this file installs standalone
+   ============================================================ */
+function icon(size) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const x = c.getContext('2d'), u = size / 64;
+  const g = x.createLinearGradient(0, 0, size, size);
+  g.addColorStop(0, '#6366f1'); g.addColorStop(1, '#22d3ee');
+  x.fillStyle = g; x.fillRect(0, 0, size, size);
+  x.strokeStyle = '#fff'; x.lineWidth = 5.5 * u; x.lineCap = 'round';
+  x.beginPath(); x.arc(32 * u, 28 * u, 10 * u, Math.PI, 0); x.stroke();
+  x.fillStyle = '#fff';
+  x.beginPath(); x.roundRect(16 * u, 28 * u, 32 * u, 23 * u, 6 * u); x.fill();
+  x.fillStyle = '#4f46e5';
+  x.beginPath(); x.arc(32 * u, 37.5 * u, 3.6 * u, 0, 7); x.fill();
+  x.beginPath(); x.roundRect(30.3 * u, 38.5 * u, 3.4 * u, 7.5 * u, 1.7 * u); x.fill();
+  return c.toDataURL('image/png');
+}
+
+try {
+  const manifest = {
+    name: 'Keyforge Password Generator', short_name: 'Keyforge',
+    description: 'Generate strong passwords and passphrases entirely offline.',
+    start_url: location.href.split('#')[0], scope: './',
+    display: 'standalone', orientation: 'any',
+    background_color: '#080b13', theme_color: '#080b13',
+    icons: [
+      { src: icon(192), sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: icon(512), sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: icon(512), sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  };
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' }));
+  document.head.appendChild(link);
+} catch (e) { /* manifest is a progressive enhancement */ }
+
+// Offline cache, if a service worker file is available alongside this page.
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+
+let deferred = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault(); deferred = e; $('install').classList.add('show');
+});
+$('install').onclick = async () => {
+  if (!deferred) return;
+  deferred.prompt();
+  await deferred.userChoice;
+  deferred = null;
+  $('install').classList.remove('show');
+};
+window.addEventListener('appinstalled', () => $('install').classList.remove('show'));
+
+/* ============================================================
+   10. GO
+   ============================================================ */
+loadPrefs();
+syncUI();
+generate();
+
+// expose internals for automated testing only
+window.__kf = { rand, pick, shuffle, makePassword, makePassphrase, entropy, WORDSET, buildPools, crackTime };
+})();
+</script>
+</body>
+</html>
