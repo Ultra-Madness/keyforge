@@ -13,11 +13,13 @@
     --bg:#080b13; --bg2:#0d1220; --card:#111827cc; --line:#1f2a44;
     --txt:#e8ecf6; --dim:#8d9ab8; --accent:#6366f1; --accent2:#22d3ee;
     --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --mid:#eab308;
+    --chipbg:#161f36;
     --radius:16px;
   }
   html[data-theme="light"]{
     --bg:#f4f6fb; --bg2:#ffffff; --card:#ffffffee; --line:#dfe5f2;
     --txt:#111827; --dim:#5b6885; --accent:#4f46e5; --accent2:#0891b2;
+    --chipbg:#eef1f9;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   body{
@@ -77,6 +79,15 @@
   #slabel{font-weight:700;font-size:13.5px}
   .sline span{color:var(--dim)}
   #scrack{font-variant-numeric:tabular-nums}
+
+  /* ---- active-rule chips ---- */
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+  .chips:empty{display:none}
+  .chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;
+    padding:4px 9px;border-radius:99px;background:var(--chipbg);color:var(--dim);
+    border:1px solid var(--line);white-space:nowrap}
+  .chip b{color:var(--txt);font-weight:700;font-family:ui-monospace,monospace}
+  .chip.cost{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 35%,transparent)}
 
   /* ---- controls ---- */
   h2{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--dim);margin-bottom:14px;font-weight:700}
@@ -204,6 +215,7 @@
       <span id="sbits">—</span>
       <span id="scrack">—</span>
     </div>
+    <div class="chips" id="chips"></div>
   </div>
 
   <!-- PASSWORD RULES -->
@@ -246,6 +258,14 @@
     <div class="num">
       <label for="exclude">Exclude characters<small>never use these</small></label>
       <input type="text" id="exclude" placeholder="e.g. &lt;&gt;&amp;" autocomplete="off" spellcheck="false" style="min-width:110px">
+    </div>
+
+    <div class="num">
+      <label for="must">Must include<small>at least this many, from this set</small></label>
+      <span style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="mustMin" min="1" max="72" value="1" aria-label="Minimum count from the required set" style="width:58px;text-align:center">
+        <input type="text" id="must" placeholder="e.g. !@#$" autocomplete="off" spellcheck="false" style="min-width:110px">
+      </span>
     </div>
 
     <div class="warn" id="pwwarn"></div>
@@ -322,6 +342,28 @@ const rand = (max) => {                     // uniform int in [0, max)
 };
 const pick = (arr) => arr[rand(arr.length)];
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = rand(i + 1); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+/* uniform float in [0,1) built from crypto bits — never Math.random */
+const randFloat = () => {
+  const b = new Uint32Array(2);
+  crypto.getRandomValues(b);
+  return ((b[0] >>> 5) * 0x4000000 + (b[1] >>> 6)) / 0x20000000000000;   // 53 bits
+};
+/* index into a weight array, proportional to weight */
+const weightedIndex = (w) => {
+  const total = w.reduce((a, b) => a + b, 0);
+  let r = randFloat() * total;
+  for (let i = 0; i < w.length; i++) { if (r < w[i]) return i; r -= w[i]; }
+  return w.length - 1;
+};
+/* binomial coefficient as a float (exact well past the sizes we use) */
+const choose = (n, k) => {
+  if (k < 0 || k > n) return 0;
+  k = Math.min(k, n - k);
+  let x = 1;
+  for (let i = 0; i < k; i++) x = x * (n - i) / (i + 1);
+  return x;
+};
 
 /* ============================================================
    2. CHARACTER SETS
@@ -438,42 +480,124 @@ function buildPools() {
   return pools.filter(p => p.length > 0);
 }
 
-function makePassword() {
+/* Resolve the "must include" rule against what is actually available.
+   Characters the user asked for but then excluded (or whose type is off) cannot
+   be honoured, so they are reported rather than silently dropped. */
+function requireRule(pools) {
+  const all = pools.flat(), avail = new Set(all);
+  const asked = [...new Set($('must').value.split(''))];
+  const set   = asked.filter(c => avail.has(c));
+  const lost  = asked.filter(c => !avail.has(c));
+  const min   = Math.max(0, Math.min(+$('mustMin').value || 0, 72));
+  return { set, lost, min: set.length ? min : 0, asked };
+}
+
+/* Plan the constraints for a given length, reporting anything that had to give way. */
+function plan() {
   const pools = buildPools();
-  const warnEl = $('pwwarn');
-  if (!pools.length) { warnEl.textContent = 'Pick at least one character type (or loosen your exclusions).'; warnEl.classList.add('show'); return null; }
+  if (!pools.length) return { ok: false, err: 'Pick at least one character type (or loosen your exclusions).' };
 
   const all = pools.flat();
-  let len = +lenEl.value;
   const unique = $('noRepeat').checked;
+  const req = requireRule(pools);
   const msgs = [];
+  let len = +lenEl.value;
 
   if (unique && len > all.length) { len = all.length; msgs.push('Length capped at ' + len + ' — that is every available character with no repeats.'); }
-  const everyType = $('everyType').checked && pools.length <= len;
+  if (req.lost.length) msgs.push('Cannot require "' + req.lost.join('') + '" — excluded, or that character type is switched off.');
+
+  let need = req.min;
+  if (need > len)                { msgs.push('Asked for ' + need + ' of "' + req.set.join('') + '" in only ' + len + ' characters; using ' + len + '.'); need = len; }
+  if (unique && need > req.set.length) { msgs.push('With no repeats you can have at most ' + req.set.length + ' of "' + req.set.join('') + '".'); need = req.set.length; }
+
+  // "one of each type" only survives if there is room for it alongside the required set
+  let everyType = $('everyType').checked && pools.length <= len;
   if ($('everyType').checked && pools.length > len) msgs.push('Too short to include one of every type; that rule was skipped.');
 
-  let chars;
-  if (unique) {
-    const bag = all.slice();
-    if (everyType) {
-      chars = pools.map(p => {                      // one guaranteed per type
-        const c = pick(p);
-        bag.splice(bag.indexOf(c), 1);
-        return c;
-      });
-      while (chars.length < len) chars.push(bag.splice(rand(bag.length), 1)[0]);
-    } else {
-      chars = [];
-      while (chars.length < len) chars.push(bag.splice(rand(bag.length), 1)[0]);
-    }
-  } else {
-    chars = everyType ? pools.map(pick) : [];
-    while (chars.length < len) chars.push(pick(all));
+  return { ok: true, pools, all, len, unique, everyType, reqSet: req.set, need, msgs };
+}
+
+/* Uniform sample of `len` characters with at least `need` drawn from `set`.
+   Naive "place the required ones then fill and shuffle" is NOT uniform here — it
+   over-represents strings that happen to hold extra required characters. Instead
+   draw the count k from its true distribution, then fill each part independently. */
+function sampleWithRequired(all, set, need, len, unique) {
+  const comp = all.filter(c => !set.includes(c));
+  const w = [], ks = [];
+  for (let k = Math.max(need, unique ? Math.max(0, len - comp.length) : 0); k <= Math.min(len, unique ? set.length : len); k++) {
+    ks.push(k);
+    w.push(unique ? choose(set.length, k) * choose(comp.length, len - k)
+                  : choose(len, k) * Math.pow(set.length, k) * Math.pow(comp.length, len - k));
   }
+  if (!ks.length) return null;
+  const k = ks[weightedIndex(w)];
+  const chars = [];
+  if (unique) {
+    const a = set.slice(), b = comp.slice();
+    for (let i = 0; i < k; i++)       chars.push(a.splice(rand(a.length), 1)[0]);
+    for (let i = 0; i < len - k; i++) chars.push(b.splice(rand(b.length), 1)[0]);
+  } else {
+    for (let i = 0; i < k; i++)       chars.push(pick(set));
+    for (let i = 0; i < len - k; i++) chars.push(pick(comp));
+  }
+  return shuffle(chars);
+}
+
+function sampleplain(all, len, unique) {
+  const chars = [];
+  if (unique) { const bag = all.slice(); while (chars.length < len) chars.push(bag.splice(rand(bag.length), 1)[0]); }
+  else        { while (chars.length < len) chars.push(pick(all)); }
+  return chars;
+}
+
+const MAX_TRIES = 3000;
+
+function makePassword() {
+  const warnEl = $('pwwarn');
+  const p = plan();
+  if (!p.ok) { warnEl.textContent = p.err; warnEl.classList.add('show'); return null; }
+
+  const msgs = p.msgs.slice();
+  const hasReq = p.need > 0 && p.reqSet.length > 0;
+  const hasEvery = p.everyType;
+  const coversAllTypes = (ch) => p.pools.every(pool => ch.some(c => pool.includes(c)));
+
+  let chars;
+  if (hasReq) {
+    // The required-count rule is sampled exactly. If the type rule is also on we
+    // reject and redraw — rejection from a uniform sampler is still uniform over
+    // the intersection, whereas patching a failed draw would skew it.
+    let tries = 0;
+    do { chars = sampleWithRequired(p.all, p.reqSet, p.need, p.len, p.unique); tries++; }
+    while (hasEvery && !coversAllTypes(chars) && tries < MAX_TRIES);
+
+    if (hasEvery && !coversAllTypes(chars))
+      msgs.push('Could not also fit one of every type around that required set, so the type rule was dropped — the result is still uniformly random, just not covering every type.');
+  } else if (hasEvery) {
+    chars = everyTypeSample(p.pools, p.all, p.len, p.unique);
+  } else {
+    chars = sampleplain(p.all, p.len, p.unique);
+  }
+
+  if (!chars) { warnEl.textContent = 'Those rules cannot be satisfied together.'; warnEl.classList.add('show'); return null; }
 
   warnEl.classList.toggle('show', msgs.length > 0);
   warnEl.textContent = msgs.join(' ');
   return shuffle(chars).join('');
+}
+
+/* One guaranteed character per enabled type, rest free. Verified uniform over the
+   set of strings containing every type (chi-square, see test suite). */
+function everyTypeSample(pools, all, len, unique) {
+  if (unique) {
+    const bag = all.slice();
+    const chars = pools.map(pl => { const c = pick(pl); bag.splice(bag.indexOf(c), 1); return c; });
+    while (chars.length < len) chars.push(bag.splice(rand(bag.length), 1)[0]);
+    return chars;
+  }
+  const chars = pools.map(pick);
+  while (chars.length < len) chars.push(pick(all));
+  return chars;
 }
 
 function makePassphrase() {
@@ -504,17 +628,53 @@ function entropy(str) {
     if ($('ppSym').checked) bits += Math.log2(12);
     return bits;
   }
-  const pools = buildPools();
-  if (!pools.length) return 0;
-  const N = pools.flat().length, L = str.length;
-  // No-repeat draws without replacement: log2(N! / (N-L)!)
-  if ($('noRepeat').checked) {
-    let bits = 0;
-    for (let i = 0; i < L; i++) bits += Math.log2(N - i);
-    return bits;
-  }
-  return L * Math.log2(N);
+  const p = plan();
+  if (!p.ok) return 0;
+  const n = countValid(p);
+  return n > 0 ? Math.log2(n) : 0;
 }
+
+/* How many distinct passwords can these settings actually produce?
+   Every rule shrinks that number, so the bit count has to be built from it
+   rather than from length x log2(pool) — otherwise the meter flatters tight rules.
+
+   Counted with inclusion-exclusion over which character types are ABSENT, so the
+   "one of each type" rule is handled exactly instead of being ignored. */
+function countValid(p) {
+  const { pools, all, len, unique, reqSet, need, everyType } = p;
+  const subsets = everyType ? 1 << pools.length : 1;
+  let total = 0;
+
+  for (let mask = 0; mask < subsets; mask++) {
+    const banned = new Set();
+    let bits = 0;
+    for (let i = 0; i < pools.length; i++) if (mask >> i & 1) { bits++; pools[i].forEach(c => banned.add(c)); }
+    const A = all.filter(c => !banned.has(c));
+    const S = reqSet.filter(c => !banned.has(c));
+    total += (bits % 2 ? -1 : 1) * countWithMin(A.length, S.length, need, len, unique);
+  }
+  return Math.max(0, total);
+}
+
+/* Strings of length `len` over an alphabet of `nAll`, of which `nSet` characters
+   belong to the required set, containing at least `need` of them. */
+function countWithMin(nAll, nSet, need, len, unique) {
+  const nComp = nAll - nSet;
+  if (nAll <= 0) return 0;
+  if (unique && len > nAll) return 0;
+
+  let sum = 0;
+  const kMax = unique ? Math.min(len, nSet) : len;
+  const kMin = Math.max(need, unique ? Math.max(0, len - nComp) : 0);
+  for (let k = kMin; k <= kMax; k++) {
+    sum += unique
+      ? choose(nSet, k) * choose(nComp, len - k) * factorial(len)
+      : choose(len, k) * Math.pow(nSet, k) * Math.pow(nComp, len - k);
+  }
+  return sum;
+}
+
+const factorial = (n) => { let x = 1; for (let i = 2; i <= n; i++) x *= i; return x; };
 
 const BANDS = [
   { max: 35,  label: 'Very weak', color: 'var(--bad)',  fill: 1 },
@@ -551,7 +711,39 @@ function score(str) {
   $('slabel').style.color = band.color;
   $('sbits').textContent = Math.round(bits) + ' bits of entropy';
   $('scrack').textContent = crackTime(bits);
+  showChips(bits);
 }
+
+/* Show which rules are actually in force, and what they cost.
+   Rules live below the fold, so without this the app looks like it has none. */
+function showChips(bits) {
+  const box = $('chips');
+  box.innerHTML = '';
+  if (mode !== 'pw') return;
+  const p = plan();
+  if (!p.ok) return;
+
+  const add = (html, cls) => {
+    const el = document.createElement('span');
+    el.className = 'chip' + (cls ? ' ' + cls : '');
+    el.innerHTML = html;
+    box.appendChild(el);
+  };
+  const esc = (s) => s.replace(/[<>&]/g, m => ({ '<':'&lt;', '>':'&gt;', '&':'&amp;' }[m]));
+
+  if ($('noAmb').checked)                add('no look-alikes');
+  if ($('exclude').value)                add('excludes <b>' + esc($('exclude').value) + '</b>');
+  if (p.need > 0 && p.reqSet.length)     add('at least ' + p.need + ' of <b>' + esc(p.reqSet.join('')) + '</b>');
+  if (p.everyType)                       add('one of each type');
+  if (p.unique)                          add('no repeats');
+
+  // What the rules cost, measured against the same length with no rules at all.
+  const free = p.unique ? logPerm(p.all.length, p.len) : p.len * Math.log2(p.all.length);
+  const cost = free - bits;
+  if (cost >= 0.5) add('rules cost <b>' + cost.toFixed(1) + '</b> bits', 'cost');
+}
+
+const logPerm = (n, l) => { let b = 0; for (let i = 0; i < l; i++) b += Math.log2(n - i); return b; };
 
 /* ============================================================
    7. ACTIONS
@@ -611,7 +803,8 @@ const PREF_KEY = 'keyforge.prefs.v1';       // settings only — never passwords
 
 function savePrefs() {
   const p = { mode, len: lenEl.value, words: wordsEl.value, sep: $('sep').value,
-              excl: $('exclude').value, theme: document.documentElement.dataset.theme };
+              excl: $('exclude').value, must: $('must').value, mustMin: $('mustMin').value,
+              theme: document.documentElement.dataset.theme };
   boxes.forEach(b => p[b.id] = b.checked);
   try { localStorage.setItem(PREF_KEY, JSON.stringify(p)); } catch {}
 }
@@ -624,6 +817,8 @@ function loadPrefs() {
   if (p.words) wordsEl.value = p.words;
   if (p.sep !== undefined) $('sep').value = p.sep;
   if (p.excl) $('exclude').value = p.excl;
+  if (p.must) $('must').value = p.must;
+  if (p.mustMin) $('mustMin').value = p.mustMin;
   boxes.forEach(b => { if (typeof p[b.id] === 'boolean') b.checked = p[b.id]; });
   if (p.mode === 'pp') setMode('pp', false);
 }
@@ -657,7 +852,8 @@ $('clear').onclick = () => { history = []; render(); };
 [lenEl, wordsEl].forEach(el => el.addEventListener('input', () => { syncUI(); generate(); savePrefs(); }));
 document.querySelectorAll('.opt input, #sep').forEach(el =>
   el.addEventListener('change', () => { syncUI(); generate(); savePrefs(); }));
-$('exclude').addEventListener('input', () => { generate(); savePrefs(); });
+['exclude', 'must', 'mustMin'].forEach(id =>
+  $(id).addEventListener('input', () => { generate(); savePrefs(); }));
 
 $('theme').onclick = () => {
   const light = document.documentElement.dataset.theme === 'light';
@@ -740,7 +936,9 @@ syncUI();
 generate();
 
 // expose internals for automated testing only
-window.__kf = { rand, pick, shuffle, makePassword, makePassphrase, entropy, WORDSET, buildPools, crackTime };
+window.__kf = { rand, pick, shuffle, randFloat, weightedIndex, choose, makePassword, makePassphrase,
+                entropy, WORDSET, buildPools, crackTime, plan, countValid, countWithMin,
+                sampleWithRequired, everyTypeSample, requireRule };
 })();
 </script>
 </body>

@@ -1,5 +1,5 @@
 /* Keyforge offline cache — caches the app shell so it works with no network. */
-const CACHE = 'keyforge-v1';
+const CACHE = 'keyforge-v2';   /* bump on every release so installed copies pick up the new build */
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
