@@ -253,6 +253,51 @@ console.log('\n=== 12. Page integrity ===');
 }
 
 
+
+console.log('\n=== 13. Version is single-sourced and consistent ===');
+{
+  const swSrc = readFileSync('/sessions/sweet-confident-ptolemy/mnt/outputs/sw.js', 'utf8');
+  const V = kf.VERSION;
+  ok('VERSION constant is exported', typeof V === 'string' && /^v\d+\.\d+\.\d+$/.test(V), V);
+
+  const cache = (swSrc.match(/const CACHE = '([^']+)'/) || [])[1];
+  ok('service worker cache key matches the app version', cache === 'keyforge-' + V,
+     cache + ' vs keyforge-' + V);
+
+  ok('version is visible in the header', $('ver').textContent === V, $('ver').textContent);
+  ok('version is in the document title', d.title.includes(V), d.title);
+  ok('version is baked into the PWA name', /name: 'Keyforge ' \+ VERSION/.test(html));
+  ok('version literal appears exactly once in index.html',
+     (html.match(/const VERSION = '/g) || []).length === 1);
+}
+
+console.log('\n=== 14. Zoom is locked ===');
+{
+  const vp = d.querySelector('meta[name=viewport]').getAttribute('content');
+  ok('viewport blocks user scaling', /user-scalable\s*=\s*no/.test(vp), vp);
+  ok('viewport pins min and max scale to 1',
+     /maximum-scale\s*=\s*1/.test(vp) && /minimum-scale\s*=\s*1/.test(vp));
+  ok('viewport still fits notched displays', /viewport-fit\s*=\s*cover/.test(vp));
+
+  ok('touch-action allows panning but not pinching', /touch-action:pan-x pan-y/.test(html));
+  ok('applied to both html and body', (html.match(/touch-action:pan-x pan-y/g) || []).length >= 2);
+  ok('mobile text auto-sizing disabled', /text-size-adjust:100%/.test(html));
+
+  // iOS Safari ignores user-scalable=no, so these are the real defence there
+  ok('iOS gesture events are prevented', /'gesturestart', 'gesturechange', 'gestureend'/.test(html));
+  ok('multi-touch drags are prevented', /e\.touches\.length > 1/.test(html));
+  ok('trackpad pinch (ctrl+wheel) is prevented', /wheel[\s\S]{0,80}e\.ctrlKey/.test(html));
+  ok('zoom listeners are non-passive, or preventDefault would be ignored',
+     (html.match(/\{ passive: false \}/g) || []).length >= 3);
+
+  // must NOT swallow taps: preventDefault on touchend would kill the synthesized click
+  ok('no touchend preventDefault (would break rapid taps on Generate)',
+     !/addEventListener\('touchend'[\s\S]{0,160}preventDefault/.test(html));
+  // keyboard zoom is the accessibility escape hatch and must stay working
+  ok('keyboard zoom is left alone', !/key\s*===\s*'\+'|keyCode\s*===\s*187|'Minus'/.test(html));
+}
+
+
 console.log('\n' + '='.repeat(58));
 console.log(`  ${pass} passed, ${fail} failed`);
 console.log('='.repeat(58) + '\n');

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Keyforge — Password Generator</title>
 <meta name="description" content="A fast, private, offline-capable password and passphrase generator. Everything happens in your browser; nothing is ever sent anywhere.">
 <meta name="theme-color" content="#0b0f1a">
@@ -22,7 +22,15 @@
     --chipbg:#eef1f9;
   }
   *{box-sizing:border-box;margin:0;padding:0}
+  /* Lock the zoom level: allow scrolling in both directions, but no pinch and no
+     double-tap zoom. text-size-adjust stops mobile browsers reflowing the type. */
+  html{
+    touch-action:pan-x pan-y;
+    -webkit-text-size-adjust:100%;
+    text-size-adjust:100%;
+  }
   body{
+    touch-action:pan-x pan-y;
     font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Inter,sans-serif;
     background:var(--bg); color:var(--txt);
     min-height:100dvh; padding:24px 16px 56px;
@@ -38,6 +46,9 @@
     display:grid;place-items:center;flex:none;box-shadow:0 6px 20px -6px var(--accent)}
   .logo svg{width:22px;height:22px}
   h1{font-size:19px;font-weight:700;letter-spacing:-.02em}
+  .ver{font:600 11px/1 ui-monospace,monospace;color:var(--dim);letter-spacing:0;
+    vertical-align:middle;padding:3px 6px;border:1px solid var(--line);border-radius:6px;
+    background:var(--chipbg);margin-left:4px}
   header p{font-size:12.5px;color:var(--dim)}
   .spacer{flex:1}
   .icon-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--bg2);
@@ -174,7 +185,7 @@
       </svg>
     </div>
     <div>
-      <h1>Keyforge</h1>
+      <h1>Keyforge <span class="ver" id="ver"></span></h1>
       <p>Strong passwords, generated on your device</p>
     </div>
     <div class="spacer"></div>
@@ -327,6 +338,13 @@
 <script>
 (() => {
 'use strict';
+
+/* ============================================================
+   0. VERSION
+   Single source of truth. Bump this on every change, and keep the CACHE
+   constant in sw.js matching so installed copies pick the new build up.
+   ============================================================ */
+const VERSION = 'v1.2.0';
 
 /* ============================================================
    1. UNBIASED RANDOMNESS  (rejection sampling — no modulo bias)
@@ -893,7 +911,7 @@ function icon(size) {
 
 try {
   const manifest = {
-    name: 'Keyforge Password Generator', short_name: 'Keyforge',
+    name: 'Keyforge ' + VERSION + ' Password Generator', short_name: 'Keyforge ' + VERSION,
     description: 'Generate strong passwords and passphrases entirely offline.',
     start_url: location.href.split('#')[0], scope: './',
     display: 'standalone', orientation: 'any',
@@ -929,8 +947,34 @@ $('install').onclick = async () => {
 window.addEventListener('appinstalled', () => $('install').classList.remove('show'));
 
 /* ============================================================
+   9b. ZOOM LOCK
+   iOS Safari has deliberately ignored user-scalable=no since iOS 10, so the
+   viewport meta tag alone does not hold there. These listeners cover the gaps.
+   Keyboard zoom (Ctrl/Cmd with + or -) is left alone on purpose: it is the
+   accessibility escape hatch for anyone who needs larger text.
+   ============================================================ */
+['gesturestart', 'gesturechange', 'gestureend'].forEach(evt =>
+  document.addEventListener(evt, (e) => e.preventDefault(), { passive: false }));
+
+// second finger down = pinch starting
+document.addEventListener('touchmove', (e) => {
+  if (e.touches.length > 1) e.preventDefault();
+}, { passive: false });
+
+// Double-tap zoom is handled by touch-action:pan-x pan-y in CSS. Doing it here
+// with preventDefault on touchend would also swallow the synthesized click and
+// break rapid taps on Generate.
+
+// trackpad pinch arrives as a wheel event with ctrlKey set
+document.addEventListener('wheel', (e) => {
+  if (e.ctrlKey) e.preventDefault();
+}, { passive: false });
+
+/* ============================================================
    10. GO
    ============================================================ */
+$('ver').textContent = VERSION;
+document.title = 'Keyforge ' + VERSION + ' — Password Generator';
 loadPrefs();
 syncUI();
 generate();
@@ -938,7 +982,7 @@ generate();
 // expose internals for automated testing only
 window.__kf = { rand, pick, shuffle, randFloat, weightedIndex, choose, makePassword, makePassphrase,
                 entropy, WORDSET, buildPools, crackTime, plan, countValid, countWithMin,
-                sampleWithRequired, everyTypeSample, requireRule };
+                sampleWithRequired, everyTypeSample, requireRule, VERSION };
 })();
 </script>
 </body>
